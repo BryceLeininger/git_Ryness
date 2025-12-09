@@ -191,6 +191,10 @@ class RynessParser:
                 i += 1
                 continue
 
+            if DATE_LINE_RE.search(line):
+                i += 1
+                continue
+
             if COUNTY_HEADER_RE.match(line):
                 current_county = line.strip()
                 skip_mode = False
