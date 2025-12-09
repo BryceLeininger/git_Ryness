@@ -187,6 +187,10 @@ class RynessParser:
                 i += 1
                 continue
 
+            if line.startswith("--- Page") and line.endswith("---"):
+                i += 1
+                continue
+
             if COUNTY_HEADER_RE.match(line):
                 current_county = line.strip()
                 skip_mode = False
@@ -230,12 +234,18 @@ class RynessParser:
 
     def _parse_raw_project_line(self, county_group: str, line: str) -> RawProjectRow:
         tokens = line.split()
-        first_numeric_index = next(i for i, token in enumerate(tokens) if NUMBER_TOKEN_RE.fullmatch(token))
-        text_tokens = tokens[:first_numeric_index]
-        number_tokens = tokens[first_numeric_index:]
+        if not tokens:
+            raise ValueError(f"Unable to parse empty project line for county {county_group}")
+
+        number_start = len(tokens)
+        while number_start > 0 and NUMBER_TOKEN_RE.fullmatch(tokens[number_start - 1]):
+            number_start -= 1
+        number_tokens = tokens[number_start:]
+        text_tokens = tokens[:number_start]
 
         if not text_tokens:
             raise ValueError(f"Unable to parse project text tokens: {line}")
+
         type_code = text_tokens[-1]
         text_tokens = text_tokens[:-1]
 
