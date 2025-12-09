@@ -29,6 +29,7 @@ DATE_LINE_RE = re.compile(r"Sunday,\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}")
 CITY_CODE_RE = re.compile(r"^[A-Z]{2,3}$")
 NUMBER_TOKEN_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
 COUNTY_HEADER_RE = re.compile(r"^[A-Za-z0-9 /&'(),.-]+\|[A-Za-z0-9 /&'(),.-]+$")
+PAGE_FOOTER_RE = re.compile(r"^\d+\s+of\s+\d+$")
 
 COLUMN_HEADER_MARKERS = {
     "Units",
@@ -192,6 +193,10 @@ class RynessParser:
                 continue
 
             if DATE_LINE_RE.search(line):
+                i += 1
+                continue
+
+            if PAGE_FOOTER_RE.fullmatch(line):
                 i += 1
                 continue
 
