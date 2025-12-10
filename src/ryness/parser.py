@@ -6,8 +6,8 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from decimal import Decimal, InvalidOperation
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from dateutil import parser as date_parser
 
@@ -108,7 +108,7 @@ class RynessParser:
     # ------------------------------------------------------------------
     def _parse_yearly_summary(self, lines: Sequence[str]) -> List[YearlySummaryEntry]:
         entries: List[YearlySummaryEntry] = []
-        seen_years: set[int] = set()
+        seen_years: Set[int] = set()
         for line in lines:
             if not line.startswith("█"):
                 continue
@@ -379,31 +379,46 @@ class RynessParser:
             if token in ["N/A", "TSO"]:
                 numbers.append(None)
             else:
-                numbers.append(Decimal(token))
+                try:
+                    numbers.append(Decimal(token))
+                except (InvalidOperation, ValueError) as e:
+                    raise ValueError(f"Invalid numeric token '{token}' in project row: {number_tokens}") from e
         
         if len(numbers) < 9:
             raise ValueError(f"Unexpected number of numeric columns ({len(numbers)}) in project row: {number_tokens}")
 
+        def safe_int_at(nums: List[Optional[Decimal]], index: int) -> Optional[int]:
+            """Safely convert a Decimal at the given index to int, or return None."""
+            if index >= len(nums) or nums[index] is None:
+                return None
+            return int(nums[index])
+
+        def safe_decimal_at(nums: List[Optional[Decimal]], index: int) -> Optional[Decimal]:
+            """Safely get a Decimal at the given index, or return None."""
+            if index >= len(nums) or nums[index] is None:
+                return None
+            return nums[index]
+
         cancellations = None
         if len(numbers) >= 11:
-            cancellations = int(numbers[6]) if numbers[6] is not None else None
-            sold_to_date = int(numbers[7]) if numbers[7] is not None and len(numbers) > 7 else None
-            sold_ytd = int(numbers[8]) if numbers[8] is not None and len(numbers) > 8 else None
-            avg_week = numbers[9] if numbers[9] is not None and len(numbers) > 9 else None
-            avg_ytd = numbers[10] if numbers[10] is not None and len(numbers) > 10 else None
+            cancellations = safe_int_at(numbers, 6)
+            sold_to_date = safe_int_at(numbers, 7)
+            sold_ytd = safe_int_at(numbers, 8)
+            avg_week = safe_decimal_at(numbers, 9)
+            avg_ytd = safe_decimal_at(numbers, 10)
         else:
-            sold_to_date = int(numbers[6]) if numbers[6] is not None and len(numbers) > 6 else None
-            sold_ytd = int(numbers[7]) if numbers[7] is not None and len(numbers) > 7 else None
-            avg_week = numbers[8] if numbers[8] is not None and len(numbers) > 8 else None
-            avg_ytd = numbers[9] if numbers[9] is not None and len(numbers) > 9 else None
+            sold_to_date = safe_int_at(numbers, 6)
+            sold_ytd = safe_int_at(numbers, 7)
+            avg_week = safe_decimal_at(numbers, 8)
+            avg_ytd = safe_decimal_at(numbers, 9)
 
         return ProjectMetrics(
-            units_total=int(numbers[0]) if numbers[0] is not None and len(numbers) > 0 else None,
-            units_new_released=int(numbers[1]) if numbers[1] is not None and len(numbers) > 1 else None,
-            units_released_to_date=int(numbers[2]) if numbers[2] is not None and len(numbers) > 2 else None,
-            units_remaining=int(numbers[3]) if numbers[3] is not None and len(numbers) > 3 else None,
-            traffic=int(numbers[4]) if numbers[4] is not None and len(numbers) > 4 else None,
-            sales_this_week=int(numbers[5]) if numbers[5] is not None and len(numbers) > 5 else None,
+            units_total=safe_int_at(numbers, 0),
+            units_new_released=safe_int_at(numbers, 1),
+            units_released_to_date=safe_int_at(numbers, 2),
+            units_remaining=safe_int_at(numbers, 3),
+            traffic=safe_int_at(numbers, 4),
+            sales_this_week=safe_int_at(numbers, 5),
             cancellations_this_week=cancellations,
             sold_to_date=sold_to_date,
             sold_year_to_date=sold_ytd,
