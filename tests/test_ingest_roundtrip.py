@@ -30,7 +30,7 @@ def test_round_trip_ingest(tmp_path: Path) -> None:  # noqa: D103 - pytest style
     parsed = parser.parse_text(text, source_pdf="113025 NorCal Ryness Report_SAMPLE.pdf")
 
     with PostgresContainer("postgres:16-alpine") as postgres:
-        conn = psycopg.connect(postgres.get_connection_url(), row_factory=dict_row)
+        conn = psycopg.connect(postgres.get_connection_url(driver=None), row_factory=dict_row)
         _run_sql_script(conn, MIGRATION)
         _run_sql_script(conn, SEEDS)
 

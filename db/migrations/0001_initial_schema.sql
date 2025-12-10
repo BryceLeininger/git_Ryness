@@ -154,7 +154,7 @@ CREATE TABLE region_yearly_summary (
 
 CREATE TABLE weekly_financial_news (
     weekly_financial_news_id BIGSERIAL PRIMARY KEY,
-    report_week_id BIGINT NOT NULL REFERENCES report_weeks(report_week_id) ON DELETE CASCADE,
+    report_week_id BIGINT NOT NULL UNIQUE REFERENCES report_weeks(report_week_id) ON DELETE CASCADE,
     headline TEXT NOT NULL,
     author TEXT,
     source TEXT,
