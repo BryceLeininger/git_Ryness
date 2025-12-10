@@ -6,8 +6,8 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from decimal import Decimal, InvalidOperation
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from dateutil import parser as date_parser
 
@@ -108,15 +108,20 @@ class RynessParser:
     # ------------------------------------------------------------------
     def _parse_yearly_summary(self, lines: Sequence[str]) -> List[YearlySummaryEntry]:
         entries: List[YearlySummaryEntry] = []
+        seen_years: Set[int] = set()
         for line in lines:
             if not line.startswith("█"):
                 continue
             parts = line.replace("█", "").split()
             if len(parts) != 7:
                 continue
+            year = int(parts[0])
+            if year in seen_years:
+                continue
+            seen_years.add(year)
             entries.append(
                 YearlySummaryEntry(
-                    calendar_year=int(parts[0]),
+                    calendar_year=year,
                     avg_weekly_projects=Decimal(parts[1]),
                     avg_weekly_traffic=Decimal(parts[2]),
                     avg_weekly_sales=Decimal(parts[3]),
@@ -200,6 +205,26 @@ class RynessParser:
                 i += 1
                 continue
 
+            if line.startswith("Copyright"):
+                i += 1
+                continue
+
+            if "San Ramon Valley Boulevard" in line or "Danville, California" in line:
+                i += 1
+                continue
+
+            if line == "THE RYNESS REPORT":
+                i += 1
+                continue
+
+            if line == "A New Home Sales, Marketing & Research Company":
+                i += 1
+                continue
+
+            if line.startswith("Sponsored by"):
+                i += 1
+                continue
+
             if COUNTY_HEADER_RE.match(line):
                 current_county = line.strip()
                 skip_mode = False
@@ -247,7 +272,7 @@ class RynessParser:
             raise ValueError(f"Unable to parse empty project line for county {county_group}")
 
         number_start = len(tokens)
-        while number_start > 0 and NUMBER_TOKEN_RE.fullmatch(tokens[number_start - 1]):
+        while number_start > 0 and (NUMBER_TOKEN_RE.fullmatch(tokens[number_start - 1]) or tokens[number_start - 1] in ["N/A", "TSO"]):
             number_start -= 1
         number_tokens = tokens[number_start:]
         text_tokens = tokens[:number_start]
@@ -348,30 +373,52 @@ class RynessParser:
         return project_name, developer_name
 
     def _map_numbers_to_metrics(self, number_tokens: Sequence[str]) -> ProjectMetrics:
-        numbers: List[Decimal] = [Decimal(token) for token in number_tokens]
+        # Convert tokens to Decimals, treating N/A and TSO as None
+        numbers: List[Optional[Decimal]] = []
+        for token in number_tokens:
+            if token in ["N/A", "TSO"]:
+                numbers.append(None)
+            else:
+                try:
+                    numbers.append(Decimal(token))
+                except (InvalidOperation, ValueError) as e:
+                    raise ValueError(f"Invalid numeric token '{token}' in project row: {number_tokens}") from e
+        
         if len(numbers) < 9:
             raise ValueError(f"Unexpected number of numeric columns ({len(numbers)}) in project row: {number_tokens}")
 
+        def safe_int_at(nums: List[Optional[Decimal]], index: int) -> Optional[int]:
+            """Safely convert a Decimal at the given index to int, or return None."""
+            if index >= len(nums) or nums[index] is None:
+                return None
+            return int(nums[index])
+
+        def safe_decimal_at(nums: List[Optional[Decimal]], index: int) -> Optional[Decimal]:
+            """Safely get a Decimal at the given index, or return None."""
+            if index >= len(nums) or nums[index] is None:
+                return None
+            return nums[index]
+
         cancellations = None
         if len(numbers) >= 11:
-            cancellations = int(numbers[6])
-            sold_to_date = int(numbers[7]) if len(numbers) > 7 else None
-            sold_ytd = int(numbers[8]) if len(numbers) > 8 else None
-            avg_week = Decimal(numbers[9]) if len(numbers) > 9 else None
-            avg_ytd = Decimal(numbers[10]) if len(numbers) > 10 else None
+            cancellations = safe_int_at(numbers, 6)
+            sold_to_date = safe_int_at(numbers, 7)
+            sold_ytd = safe_int_at(numbers, 8)
+            avg_week = safe_decimal_at(numbers, 9)
+            avg_ytd = safe_decimal_at(numbers, 10)
         else:
-            sold_to_date = int(numbers[6]) if len(numbers) > 6 else None
-            sold_ytd = int(numbers[7]) if len(numbers) > 7 else None
-            avg_week = Decimal(numbers[8]) if len(numbers) > 8 else None
-            avg_ytd = Decimal(numbers[9]) if len(numbers) > 9 else None
+            sold_to_date = safe_int_at(numbers, 6)
+            sold_ytd = safe_int_at(numbers, 7)
+            avg_week = safe_decimal_at(numbers, 8)
+            avg_ytd = safe_decimal_at(numbers, 9)
 
         return ProjectMetrics(
-            units_total=int(numbers[0]) if len(numbers) > 0 else None,
-            units_new_released=int(numbers[1]) if len(numbers) > 1 else None,
-            units_released_to_date=int(numbers[2]) if len(numbers) > 2 else None,
-            units_remaining=int(numbers[3]) if len(numbers) > 3 else None,
-            traffic=int(numbers[4]) if len(numbers) > 4 else None,
-            sales_this_week=int(numbers[5]) if len(numbers) > 5 else None,
+            units_total=safe_int_at(numbers, 0),
+            units_new_released=safe_int_at(numbers, 1),
+            units_released_to_date=safe_int_at(numbers, 2),
+            units_remaining=safe_int_at(numbers, 3),
+            traffic=safe_int_at(numbers, 4),
+            sales_this_week=safe_int_at(numbers, 5),
             cancellations_this_week=cancellations,
             sold_to_date=sold_to_date,
             sold_year_to_date=sold_ytd,

@@ -85,7 +85,7 @@ class _Loader:
                 """,
                 (name, slug),
             )
-            return cur.fetchone()[0]
+            return cur.fetchone()["region_id"]
 
     def _ensure_report_week(
         self,
@@ -108,7 +108,7 @@ class _Loader:
                 """,
                 (region_id, week_end_date, week_label, source_pdf),
             )
-            return cur.fetchone()[0]
+            return cur.fetchone()["report_week_id"]
 
     def _ensure_county_groups(
         self,
@@ -132,7 +132,7 @@ class _Loader:
                     """,
                     (region_id, name, name),
                 )
-                county_id = cur.fetchone()[0]
+                county_id = cur.fetchone()["county_group_id"]
                 self._county_cache[name] = county_id
 
     # ------------------------------------------------------------------
@@ -165,7 +165,7 @@ class _Loader:
                 """,
                 (name,),
             )
-            developer_id = cur.fetchone()[0]
+            developer_id = cur.fetchone()["developer_id"]
             self._developer_cache[name] = developer_id
             return developer_id
 
@@ -262,7 +262,7 @@ class _Loader:
                     report_week_id,
                 ),
             )
-            project_id = cur.fetchone()[0]
+            project_id = cur.fetchone()["project_id"]
             return project_id
 
     def _upsert_project_weekly_stats(
